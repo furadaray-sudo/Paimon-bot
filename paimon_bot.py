@@ -1,22 +1,27 @@
 import logging
 import os
-from telegram import Update
+import asyncio
+from telegram import Update, InputFile
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 import g4f
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
 
 # --- НАСТРОЙКИ ---
-# Токен мы будем хранить в переменной окружения (это безопасно)
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 # -----------------
 
+# Логирование
 logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
 )
 logger = logging.getLogger(__name__)
 
-# Словарь для истории разговоров
+# История разговоров
 conversation_history = {}
 
+# Системный промпт Паймон
 SYSTEM_PROMPT = """
 Ты — Паймон, маленькая волшебная спутница Путешественника из игры Genshin Impact.
 Твои основные правила:
@@ -28,6 +33,24 @@ SYSTEM_PROMPT = """
 
 Общайся с Путешественником именно так!
 """
+
+# --- Фиктивный веб-сервер, чтобы Render не ругался на порт ---
+class HealthCheckHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"OK")
+    def log_message(self, format, *args):
+        pass  # отключаем логи сервера
+
+def run_http_server():
+    server = HTTPServer(('0.0.0.0', 10000), HealthCheckHandler)
+    logger.info("Фиктивный HTTP-сервер запущен на порту 10000")
+    server.serve_forever()
+
+# Запускаем сервер в отдельном потоке
+threading.Thread(target=run_http_server, daemon=True).start()
+# -------------------------------------------------------------
 
 def trim_history(history, max_length=4000):
     current_length = sum(len(msg["content"]) for msg in history)
@@ -43,7 +66,7 @@ async def get_paimon_response(user_message: str, user_id: int) -> str:
     conversation_history[user_id].append({"role": "user", "content": user_message})
     conversation_history[user_id] = trim_history(conversation_history[user_id])
     
-    # Максимально широкий список провайдеров
+    # Список провайдеров (самые стабильные)
     providers = [
         g4f.Provider.Liaobots,
         g4f.Provider.ChatBase,
@@ -52,32 +75,6 @@ async def get_paimon_response(user_message: str, user_id: int) -> str:
         g4f.Provider.FreeGpt,
         g4f.Provider.Bing,
         g4f.Provider.You,
-        g4f.Provider.AItianhu,
-        g4f.Provider.Aura,
-        g4f.Provider.Bard,
-        g4f.Provider.Bestim,
-        g4f.Provider.Blackbox,
-        g4f.Provider.ChatgptAi,
-        g4f.Provider.ChatgptLogin,
-        g4f.Provider.CodeNews,
-        g4f.Provider.Cromicle,
-        g4f.Provider.DuckDuckGo,
-        g4f.Provider.FakeGpt,
-        g4f.Provider.FeedoughAi,
-        g4f.Provider.GptGo,
-        g4f.Provider.H2o,
-        g4f.Provider.HuggingChat,
-        g4f.Provider.HuggingFace,
-        g4f.Provider.Koala,
-        g4f.Provider.Lockchat,
-        g4f.Provider.MikuChat,
-        g4f.Provider.MyShell,
-        g4f.Provider.PerplexityAi,
-        g4f.Provider.Pi,
-        g4f.Provider.Theb,
-        g4f.Provider.Vercel,
-        g4f.Provider.Wewordle,
-        g4f.Provider.Yqcloud,
     ]
     
     for provider in providers:
@@ -90,7 +87,7 @@ async def get_paimon_response(user_message: str, user_id: int) -> str:
                 timeout=30,
             )
             reply = response
-            logger.info(f"Провайдер {provider.__name__} сработал!")
+            logger.info(f"Провайдер {provider.__name__} успешно ответил!")
             break
         except Exception as e:
             logger.error(f"Провайдер {provider.__name__} ошибка: {e}")
@@ -101,13 +98,12 @@ async def get_paimon_response(user_message: str, user_id: int) -> str:
     
     conversation_history[user_id].append({"role": "assistant", "content": reply})
     return reply
-    
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     await update.message.reply_text(
         f"🎉 Паймон приветствует тебя, {user.first_name}! 🎉\n\n"
-        f"Паймон теперь твой личный бесплатный гид! Можешь спрашивать о чём угодно. Ням-ням! 😋"
+        f"Паймон теперь твой личный гид! Можешь спрашивать о чём угодно. Ням-ням! 😋"
     )
 
 async def clear_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -121,9 +117,16 @@ async def clear_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_message = update.message.text
     user_id = update.effective_user.id
+    logger.info(f"Сообщение от пользователя {user_id}: {user_message}")
+
+    # Показываем "печатает..."
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
-    reply = await get_paimon_response(user_message, user_id)
-    await update.message.reply_text(reply)
+
+    # Получаем ответ
+    reply_text = await get_paimon_response(user_message, user_id)
+
+    # Отправляем ответ
+    await update.message.reply_text(reply_text)
 
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.warning(f"Update {update} caused error {context.error}")
@@ -133,12 +136,16 @@ def main():
         logger.error("Токен не найден! Добавь переменную окружения TELEGRAM_BOT_TOKEN")
         return
 
+    # Проверим версию g4f
+    logger.info(f"Используется g4f версии: {getattr(g4f, '__version__', 'неизвестно')}")
+
     app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("clear", clear_history))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.add_error_handler(error_handler)
-    print("🤖 Паймон запустилась и готов к приключениям!")
+
+    logger.info("🤖 Паймон запустилась и готов к приключениям!")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == '__main__':
