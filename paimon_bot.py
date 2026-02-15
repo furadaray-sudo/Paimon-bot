@@ -43,7 +43,7 @@ async def get_paimon_response(user_message: str) -> str:
                 "Content-Type": "application/json",
             },
             json={
-                "model": "mistralai/mistral-7b-instruct:free",
+                "model": "deepseek/deepseek-r1-distill-qwen-7b:free",
                 "messages": [
                     {"role": "system", "content": SYSTEM_PROMPT},
                     {"role": "user", "content": user_message}
