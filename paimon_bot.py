@@ -45,13 +45,11 @@ async def get_paimon_response(user_message: str, user_id: int) -> str:
     
     # Список провайдеров по порядку (первый рабочий будет использован)
     providers = [
-        g4f.Provider.GeekGpt,
-        g4f.Provider.Bing,
-        g4f.Provider.Liaobots,
-        g4f.Provider.ChatBase,
-        g4f.Provider.FreeGpt,
-        g4f.Provider.GptForLove,
-        g4f.Provider.DeepAi,
+    g4f.Provider.Liaobots,
+    g4f.Provider.ChatBase,
+    g4f.Provider.DeepAi,
+    g4f.Provider.GptForLove,
+    g4f.Provider.FreeGpt,
     ]
     
     last_error = ""
