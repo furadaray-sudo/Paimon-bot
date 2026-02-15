@@ -116,6 +116,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_message = update.message.text
     user_id = update.effective_user.id
     logger.info(f"Сообщение от пользователя {user_id}: {user_message}")
+    await update.message.reply_text(f"Ты написал: {user_message}")
 
     # Показываем "печатает..."
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
