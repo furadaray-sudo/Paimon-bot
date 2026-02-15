@@ -1,12 +1,14 @@
 import logging
 import os
-from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+import requests
 import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
+from telegram import Update
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
 # --- НАСТРОЙКИ ---
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
 # -----------------
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
@@ -28,23 +30,63 @@ def run_http_server():
 threading.Thread(target=run_http_server, daemon=True).start()
 # -----------------------------------------
 
+SYSTEM_PROMPT = """Ты — Паймон, маленькая волшебная спутница Путешественника из игры Genshin Impact.
+Ты всегда говоришь о себе в третьем лице. Ты очень болтливая, энергичная и любишь покушать.
+Ты — лучший гид и всегда готова помочь Путешественнику. Общайся весело и дружелюбно!"""
+
+async def get_paimon_response(user_message: str) -> str:
+    try:
+        response = requests.post(
+            url="https://openrouter.ai/api/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": "google/gemini-2.0-flash-exp:free",
+                "messages": [
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": user_message}
+                ],
+            },
+            timeout=30
+        )
+        if response.status_code == 200:
+            return response.json()["choices"][0]["message"]["content"]
+        else:
+            logger.error(f"Ошибка OpenRouter: {response.status_code} - {response.text}")
+            return "Ой-ой! Паймон запуталась в облаках. Попробуй ещё раз через минуточку! 😥"
+    except Exception as e:
+        logger.error(f"Исключение при запросе: {e}")
+        return "Ой-ой! Паймон запуталась в облаках. Попробуй ещё раз через минуточку! 😥"
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Привет! Я Паймон. Отправь мне любое сообщение, и я повторю его.")
+    user = update.effective_user
+    await update.message.reply_text(
+        f"🎉 Паймон приветствует тебя, {user.first_name}! 🎉\n\n"
+        f"Паймон теперь работает через OpenRouter и готова отвечать на вопросы! Ням-ням! 😋"
+    )
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_message = update.message.text
-    logger.info(f"Получено сообщение: {user_message}")
-    await update.message.reply_text(f"Ты написал: {user_message}")
+    logger.info(f"Сообщение от пользователя: {user_message}")
+    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
+    reply_text = await get_paimon_response(user_message)
+    await update.message.reply_text(reply_text)
+
+async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.warning(f"Update {update} caused error {context.error}")
 
 def main():
-    if not TELEGRAM_BOT_TOKEN:
-        logger.error("Токен не найден!")
+    if not TELEGRAM_BOT_TOKEN or not OPENROUTER_API_KEY:
+        logger.error("Не заданы токены!")
         return
     app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    logger.info("Тестовая Паймон запущена!")
-    app.run_polling()
+    app.add_error_handler(error_handler)
+    logger.info("🤖 Паймон с OpenRouter запустилась!")
+    app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == '__main__':
     main()
