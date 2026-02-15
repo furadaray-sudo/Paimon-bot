@@ -39,11 +39,12 @@ async def get_paimon_response(user_message: str) -> str:
         response = requests.post(
             url="https://openrouter.ai/api/v1/chat/completions",
             headers={
-                "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-                "Content-Type": "application/json",
-            },
+    "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+    "Content-Type": "application/json",
+    "HTTP-Referer": "https://paimon-bot-dcod.onrender.com",
+},
             json={
-                "model": "microsoft/phi-3-mini-128k-instruct:free",
+                "model": "google/gemini-2.0-flash-exp:free",
                 "messages": [
                     {"role": "system", "content": SYSTEM_PROMPT},
                     {"role": "user", "content": user_message}
