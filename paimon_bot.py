@@ -36,8 +36,10 @@ SYSTEM_PROMPT = """Ты — Паймон, маленькая волшебная 
 
 async def get_paimon_response(user_message: str) -> str:
     try:
-        API_URL = "https://router.huggingface.co/models/microsoft/Phi-3-mini-4k-instruct"
-        headers = {"Authorization": f"Bearer {HUGGINGFACE_API_KEY}"}
+        API_URL = "https://router.huggingface.co/hf/microsoft/Phi-3-mini-4k-instruct"
+        headers = {"Authorization": f"Bearer {
+            
+        }"}
         
         payload = {
             "inputs": f"<|system|>\n{SYSTEM_PROMPT}\n<|user|>\n{user_message}\n<|assistant|>\n",
