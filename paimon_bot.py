@@ -43,16 +43,43 @@ async def get_paimon_response(user_message: str, user_id: int) -> str:
     conversation_history[user_id].append({"role": "user", "content": user_message})
     conversation_history[user_id] = trim_history(conversation_history[user_id])
     
-    # Список провайдеров по порядку (первый рабочий будет использован)
+    # Максимально широкий список провайдеров
     providers = [
-    g4f.Provider.Liaobots,
-    g4f.Provider.ChatBase,
-    g4f.Provider.DeepAi,
-    g4f.Provider.GptForLove,
-    g4f.Provider.FreeGpt,
+        g4f.Provider.Liaobots,
+        g4f.Provider.ChatBase,
+        g4f.Provider.DeepAi,
+        g4f.Provider.GptForLove,
+        g4f.Provider.FreeGpt,
+        g4f.Provider.Bing,
+        g4f.Provider.You,
+        g4f.Provider.AItianhu,
+        g4f.Provider.Aura,
+        g4f.Provider.Bard,
+        g4f.Provider.Bestim,
+        g4f.Provider.Blackbox,
+        g4f.Provider.ChatgptAi,
+        g4f.Provider.ChatgptLogin,
+        g4f.Provider.CodeNews,
+        g4f.Provider.Cromicle,
+        g4f.Provider.DuckDuckGo,
+        g4f.Provider.FakeGpt,
+        g4f.Provider.FeedoughAi,
+        g4f.Provider.GptGo,
+        g4f.Provider.H2o,
+        g4f.Provider.HuggingChat,
+        g4f.Provider.HuggingFace,
+        g4f.Provider.Koala,
+        g4f.Provider.Lockchat,
+        g4f.Provider.MikuChat,
+        g4f.Provider.MyShell,
+        g4f.Provider.PerplexityAi,
+        g4f.Provider.Pi,
+        g4f.Provider.Theb,
+        g4f.Provider.Vercel,
+        g4f.Provider.Wewordle,
+        g4f.Provider.Yqcloud,
     ]
     
-    last_error = ""
     for provider in providers:
         try:
             logger.info(f"Пробуем провайдера: {provider.__name__}")
@@ -60,54 +87,21 @@ async def get_paimon_response(user_message: str, user_id: int) -> str:
                 model=g4f.models.default,
                 messages=conversation_history[user_id],
                 provider=provider,
-                timeout=60,  # таймаут 60 секунд
+                timeout=30,
             )
             reply = response
             logger.info(f"Провайдер {provider.__name__} сработал!")
-            break  # выходим из цикла, если успешно
+            break
         except Exception as e:
-            last_error = str(e)
-            logger.error(f"Провайдер {provider.__name__} не сработал: {e}")
+            logger.error(f"Провайдер {provider.__name__} ошибка: {e}")
             continue
     else:
-        # Если ни один провайдер не сработал
         logger.error("Все провайдеры недоступны")
         return "Ой-ой! Паймон запуталась в облаках и не может найти дорогу. Попробуй ещё раз через минуточку! 😥"
     
     conversation_history[user_id].append({"role": "assistant", "content": reply})
     return reply
-    if user_id not in conversation_history:
-        conversation_history[user_id] = [{"role": "system", "content": SYSTEM_PROMPT}]
     
-    conversation_history[user_id].append({"role": "user", "content": user_message})
-    conversation_history[user_id] = trim_history(conversation_history[user_id])
-    
-    try:
-        # Пробуем одного провайдера
-        response = await g4f.ChatCompletion.create_async(
-            model=g4f.models.default,
-            messages=conversation_history[user_id],
-            provider=g4f.Provider.GeekGpt,
-            timeout=120,
-        )
-        reply = response
-    except Exception as e:
-        logger.error(f"Ошибка с GeekGpt: {e}")
-        try:
-            # Если не сработал, пробуем Bing
-            response = await g4f.ChatCompletion.create_async(
-                model=g4f.models.default,
-                messages=conversation_history[user_id],
-                provider=g4f.Provider.Bing,
-                timeout=120,
-            )
-            reply = response
-        except Exception as e2:
-            logger.error(f"Ошибка с Bing: {e2}")
-            return "Ой-ой! Паймон запуталась в облаках. Попробуй ещё раз через минуточку! 😥"
-    
-    conversation_history[user_id].append({"role": "assistant", "content": reply})
-    return reply
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
