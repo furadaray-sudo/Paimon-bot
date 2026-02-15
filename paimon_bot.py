@@ -43,6 +43,47 @@ async def get_paimon_response(user_message: str, user_id: int) -> str:
     conversation_history[user_id].append({"role": "user", "content": user_message})
     conversation_history[user_id] = trim_history(conversation_history[user_id])
     
+    # Список провайдеров по порядку (первый рабочий будет использован)
+    providers = [
+        g4f.Provider.GeekGpt,
+        g4f.Provider.Bing,
+        g4f.Provider.Liaobots,
+        g4f.Provider.ChatBase,
+        g4f.Provider.FreeGpt,
+        g4f.Provider.GptForLove,
+        g4f.Provider.DeepAi,
+    ]
+    
+    last_error = ""
+    for provider in providers:
+        try:
+            logger.info(f"Пробуем провайдера: {provider.__name__}")
+            response = await g4f.ChatCompletion.create_async(
+                model=g4f.models.default,
+                messages=conversation_history[user_id],
+                provider=provider,
+                timeout=60,  # таймаут 60 секунд
+            )
+            reply = response
+            logger.info(f"Провайдер {provider.__name__} сработал!")
+            break  # выходим из цикла, если успешно
+        except Exception as e:
+            last_error = str(e)
+            logger.error(f"Провайдер {provider.__name__} не сработал: {e}")
+            continue
+    else:
+        # Если ни один провайдер не сработал
+        logger.error("Все провайдеры недоступны")
+        return "Ой-ой! Паймон запуталась в облаках и не может найти дорогу. Попробуй ещё раз через минуточку! 😥"
+    
+    conversation_history[user_id].append({"role": "assistant", "content": reply})
+    return reply
+    if user_id not in conversation_history:
+        conversation_history[user_id] = [{"role": "system", "content": SYSTEM_PROMPT}]
+    
+    conversation_history[user_id].append({"role": "user", "content": user_message})
+    conversation_history[user_id] = trim_history(conversation_history[user_id])
+    
     try:
         # Пробуем одного провайдера
         response = await g4f.ChatCompletion.create_async(
