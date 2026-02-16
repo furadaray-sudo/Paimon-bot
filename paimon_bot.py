@@ -86,4 +86,32 @@ def main():
     )
 
 if __name__ == "__main__":
-    main()
+    def main():
+    if not TELEGRAM_BOT_TOKEN:
+        logger.error("TELEGRAM_BOT_TOKEN не найден!")
+        return
+
+    if not GROQ_API_KEY:
+        logger.error("GROQ_API_KEY не найден!")
+        return
+
+    app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    app.add_error_handler(error_handler)
+
+    logger.info("Бот запускается в режиме WEBHOOK...")
+
+    PORT = int(os.environ.get("PORT", 10000))
+    WEBHOOK_PATH = "/webhook"
+    WEBHOOK_URL = f"https://{os.environ.get('RENDER_EXTERNAL_HOSTNAME')}{WEBHOOK_PATH}"
+
+    app.run_webhook(
+        listen="0.0.0.0",
+        port=PORT,
+        url_path=WEBHOOK_PATH,
+        webhook_url=WEBHOOK_URL,
+        allowed_updates=Update.ALL_TYPES,
+        drop_pending_updates=True,
+    )
