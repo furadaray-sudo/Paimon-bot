@@ -4,6 +4,8 @@ import requests
 from http.server import HTTPServer, BaseHTTPRequestHandler  # можно оставить, но не используем
 import threading  # можно удалить, если не используешь больше
 from openai import OpenAI
+from telegram import Update
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 import os
 
 client = OpenAI(
