@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 # === ТВОИ ФУНКЦИИ (оставляем как есть) ===
 async def get_paimon_response(user_message: str) -> str:
     try:
-        API_URL = "https://router.huggingface.co/hf-inference/models/microsoft/DialoGPT-medium"
+        API_URL = "https://router.huggingface.co/hf-inference/models/gpt2"
         headers = {"Authorization": f"Bearer {HUGGINGFACE_API_KEY}"}
         payload = {"inputs": user_message}
         response = requests.post(API_URL, headers=headers, json=payload, timeout=30)
