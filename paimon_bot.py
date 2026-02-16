@@ -3,7 +3,7 @@ import os
 import requests
 import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
-from telegram import Update
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
 # --- НАСТРОЙКИ ---
@@ -36,16 +36,15 @@ SYSTEM_PROMPT = """Ты — Паймон, маленькая волшебная 
 
 async def get_paimon_response(user_message: str) -> str:
     try:
-        API_URL = "https://router.huggingface.co/hf/mistralai/Mistral-7B-Instruct-v0.2"
+        # Используем самую стабильную бесплатную модель
+        API_URL = "https://api-inference.huggingface.co/models/microsoft/DialoGPT-medium"
         headers = {"Authorization": f"Bearer {HUGGINGFACE_API_KEY}"}
         
         payload = {
-            "inputs": f"<|system|>\n{SYSTEM_PROMPT}\n<|user|>\n{user_message}\n<|assistant|>\n",
-            "parameters": {
-                "max_new_tokens": 300,
-                "temperature": 0.7,
-                "top_p": 0.9,
-                "do_sample": True
+            "inputs": {
+                "past_user_inputs": [],
+                "generated_responses": [],
+                "text": user_message
             }
         }
         
@@ -53,12 +52,9 @@ async def get_paimon_response(user_message: str) -> str:
         
         if response.status_code == 200:
             result = response.json()
+            # DialoGPT возвращает список с ответом
             if isinstance(result, list) and len(result) > 0:
-                if "generated_text" in result[0]:
-                    return result[0]["generated_text"].split("<|assistant|>\n")[-1].strip()
-                return str(result[0])
-            elif isinstance(result, dict) and "generated_text" in result:
-                return result["generated_text"].split("<|assistant|>\n")[-1].strip()
+                return result[0].get("generated_text", "Паймон не знает, что сказать.")
             else:
                 return str(result)
         else:
@@ -71,17 +67,33 @@ async def get_paimon_response(user_message: str) -> str:
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
+    # Создаём кнопку "Копировать" (Inline-кнопка)
+    keyboard = [[InlineKeyboardButton("📋 Копировать текст", callback_data='copy')]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
     await update.message.reply_text(
         f"🎉 Паймон приветствует тебя, {user.first_name}! 🎉\n\n"
-        f"Паймон теперь работает через Hugging Face и готова отвечать на вопросы! Ням-ням! 😋"
+        f"Паймон теперь работает через Hugging Face и готова отвечать на вопросы! Ням-ням! 😋",
+        reply_markup=reply_markup
     )
+
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    if query.data == 'copy':
+        await query.edit_message_text(text="Текст скопирован (это демо, в реальности тут будет текст ответа).")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_message = update.message.text
     logger.info(f"Сообщение от пользователя: {user_message}")
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
     reply_text = await get_paimon_response(user_message)
-    await update.message.reply_text(reply_text)
+    
+    # Добавляем кнопку под ответом
+    keyboard = [[InlineKeyboardButton("📋 Копировать ответ", callback_data='copy_answer')]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await update.message.reply_text(reply_text, reply_markup=reply_markup)
 
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.warning(f"Update {update} caused error {context.error}")
@@ -93,9 +105,10 @@ def main():
     app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    app.add_handler(CallbackQueryHandler(button_handler))
     app.add_error_handler(error_handler)
     logger.info("🤖 Паймон с Hugging Face запустилась!")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == '__main__':
-    main()
+    main()         
