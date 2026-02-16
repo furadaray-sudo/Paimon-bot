@@ -1,6 +1,7 @@
 import logging
 import os
 import threading
+HUGGINGFACE_API_KEY = os.environ.get("HUGGINGFACE_API_KEY")
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackQueryHandler, ContextTypes
@@ -47,4 +48,6 @@ def main():
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == '__main__':
-    main()
+    main()if not HUGGINGFACE_API_KEY:
+    logger.error("Ключ Hugging Face не найден!")
+    # но не выходим, просто логируем
