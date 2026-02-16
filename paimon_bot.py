@@ -64,8 +64,7 @@ def main():
         logger.error("Токен Telegram не найден!")
         return
 
-    if not HUGGINGFACE_API_KEY:
-        logger.warning("HUGGINGFACE_API_KEY не найден! Ответы от HF не будут работать.")
+    
 
     app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
 
