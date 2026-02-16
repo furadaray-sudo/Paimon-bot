@@ -24,6 +24,25 @@ def run_http_server():
     server.serve_forever()
 
 threading.Thread(target=run_http_server, daemon=True).start()
+async def get_paimon_response(user_message: str) -> str:
+    try:
+        API_URL = "https://api-inference.huggingface.co/models/microsoft/DialoGPT-medium"
+        headers = {"Authorization": f"Bearer {HUGGINGFACE_API_KEY}"}
+        payload = {"inputs": user_message}
+        response = requests.post(API_URL, headers=headers, json=payload, timeout=30)
+        if response.status_code == 200:
+            result = response.json()
+            # DialoGPT возвращает список с ответом
+            if isinstance(result, list) and len(result) > 0:
+                return result[0].get("generated_text", "Паймон не знает, что сказать.")
+            else:
+                return str(result)
+        else:
+            logger.error(f"Ошибка Hugging Face: {response.status_code} - {response.text}")
+            return "Ой-ой! Паймон запуталась в облаках. Попробуй ещё раз через минуточку! 😥"
+    except Exception as e:
+        logger.error(f"Исключение: {e}")
+        return "Ой-ой! Паймон запуталась в облаках. Попробуй ещё раз через минуточку! 😥"
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Привет! Я простой бот. Напиши мне что-нибудь.")
