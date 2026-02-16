@@ -1,6 +1,7 @@
 import logging
 import os
 import threading
+import requests
 HUGGINGFACE_API_KEY = os.environ.get("HUGGINGFACE_API_KEY")
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
