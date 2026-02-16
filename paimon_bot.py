@@ -3,39 +3,28 @@ import os
 import requests
 from http.server import HTTPServer, BaseHTTPRequestHandler  # можно оставить, но не используем
 import threading  # можно удалить, если не используешь больше
+from openai import OpenAI
+import os
 
-from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+client = OpenAI(
+    api_key=os.environ.get("GROQ_API_KEY"),
+    base_url="https://api.groq.com/openai/v1",
+)
 
-HUGGINGFACE_API_KEY = os.environ.get("HUGGINGFACE_API_KEY")
-TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
-
-# === НОВОЕ ДЛЯ RENDER + WEBHOOK ===
-PORT = int(os.environ.get("PORT", 10000))
-WEBHOOK_PATH = "/webhook"
-# RENDER_EXTERNAL_HOSTNAME — автоматически даёт Render (например paimon-bot-1.onrender.com)
-WEBHOOK_URL = f"https://{os.environ.get('RENDER_EXTERNAL_HOSTNAME', 'localhost')}{WEBHOOK_PATH}"
-
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-# === ТВОИ ФУНКЦИИ (оставляем как есть) ===
 async def get_paimon_response(user_message: str) -> str:
     try:
-        API_URL = "https://router.huggingface.co/hf-inference/models/microsoft/DialoGPT-small"
-        headers = {"Authorization": f"Bearer {HUGGINGFACE_API_KEY}"}
-        payload = {"inputs": user_message}
-        response = requests.post(API_URL, headers=headers, json=payload, timeout=30)
-        
-        if response.status_code == 200:
-            result = response.json()
-            if isinstance(result, list) and len(result) > 0:
-                return result[0].get("generated_text", "Паймон не знает, что сказать.")
-            else:
-                return str(result)
-        else:
-            logger.error(f"Ошибка Hugging Face: {response.status_code} - {response.text}")
-            return "Ой-ой! Паймон запуталась в облаках. Попробуй ещё раз через минуточку! 😅"
+        response = client.chat.completions.create(
+            model="llama-3.1-8b-instant",  # или "llama-3.2-3b-instruct", "mixtral-8x7b-32768" — все бесплатные
+            messages=[{"role": "user", "content": user_message}],
+            max_tokens=200,
+            temperature=0.9,
+        )
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        logger.error(f"Ошибка Groq: {e}")
+        return "Ой-ой! Паймон запуталась в облаках... Попробуй ещё раз! 😅"
+
+
     except Exception as e:
         logger.error(f"Исключение: {e}")
         return "Ой-ой! Паймон запуталась в облаках. Попробуй ещё раз через минуточку! 😅"
