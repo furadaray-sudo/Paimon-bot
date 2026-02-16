@@ -50,7 +50,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_message = update.message.text
     logger.info(f"Сообщение: {user_message}")
-    await update.message.reply_text(f"Ты написал: {user_message}")
+    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
+    reply_text = await get_paimon_response(user_message)
+    await update.message.reply_text(reply_text)
 
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.warning(f"Update {update} caused error {context.error}")
