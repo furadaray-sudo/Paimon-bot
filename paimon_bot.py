@@ -1,15 +1,27 @@
 import logging
 import os
-import requests
-from http.server import HTTPServer, BaseHTTPRequestHandler  # можно оставить, но не используем
-import threading  # можно удалить, если не используешь больше
+
 from openai import OpenAI
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
-import os
+
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Переменные окружения
+TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
+
+if not TELEGRAM_BOT_TOKEN:
+    logger.error("TELEGRAM_BOT_TOKEN не найден!")
+    exit(1)  # или return, но лучше exit для ясности в логах
+
+if not GROQ_API_KEY:
+    logger.error("GROQ_API_KEY не найден!")
+    exit(1)
 
 client = OpenAI(
-    api_key=os.environ.get("GROQ_API_KEY"),
+    api_key=GROQ_API_KEY,
     base_url="https://api.groq.com/openai/v1",
 )
 
