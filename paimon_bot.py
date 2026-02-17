@@ -106,7 +106,7 @@ async def draw(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception as e:
             logger.error(f"URL {url} вызвал исключение: {e}")
             continue
-    позже.")
+    
     # Если ни один URL не сработал
     await update.message.reply_text("Ой-ой! Паймон не смогла нарисовать. Попробуй позже.")
 # -----------------------------
