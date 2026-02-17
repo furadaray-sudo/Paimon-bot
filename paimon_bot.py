@@ -8,7 +8,6 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Переменные окружения
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 
@@ -58,7 +57,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.warning(f"Update {update} caused error {context.error}")
 
-# === ГЛАВНАЯ ФУНКЦИЯ (полностью новая) ===
 def main():
     if not TELEGRAM_BOT_TOKEN:
         logger.error("Токен Telegram не найден!")
@@ -74,7 +72,6 @@ def main():
 
     logger.info("🤖 Бот запускается в режиме WEBHOOK на Render...")
 
-    # Запускаем webhook (автоматически установит set_webhook + запустит сервер)
     app.run_webhook(
         listen="0.0.0.0",
         port=PORT,
