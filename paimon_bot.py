@@ -80,7 +80,7 @@ async def draw(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     try:
         # Используем Hugging Face Inference API
-        API_URL = "https://router.huggingface.co/models/black-forest-labs/FLUX.1-schnell"
+        API_URL = "https://router.huggingface.co/hf/prompthero/openjourney-v4"
         headers = {"Authorization": f"Bearer {HUGGINGFACE_API_KEY}"}
         payload = {"inputs": prompt}
         
