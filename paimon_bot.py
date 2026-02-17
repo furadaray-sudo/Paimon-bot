@@ -32,14 +32,14 @@ def run_http_server():
 
 threading.Thread(target=run_http_server, daemon=True).start()
 # -----------------------------------------
-
+ого
 # Системный промпт для Паймон
 SYSTEM_PROMPT = "Ты — Паймон из игры Genshin Impact. Говори как Паймон (в третьем лице, весело, иногда упоминай еду)."
 
 async def get_paimon_response(user_message: str) -> str:
     try:
         completion = client.chat.completions.create(
-            model="llama-3.1-8b-instant",  # бесплатная быстрая модель, можно также "mixtral-8x7b-32768"
+            model="gemma2-9b-it",  # бесплатная быстрая модель, можно также "mixtral-8x7b-32768"
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": user_message}
