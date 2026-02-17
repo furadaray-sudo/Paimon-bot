@@ -1,3 +1,2 @@
-python-telegram-bot[webhooks]
-requests
-openai
+python-telegram-bot
+groq
