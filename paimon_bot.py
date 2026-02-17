@@ -1,21 +1,25 @@
 import logging
 import os
 import threading
+import requests  # <-- обязательно
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from groq import Groq
 
-# --- НАСТРОЙКИ ---
+# --- НАСТРОЙКИ ЛОГИРОВАНИЯ (должно быть в начале) ---
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+logger = logging.getLogger(__name__)
+# ----------------------------------------------------
+
+# --- НАСТРОЙКИ ТОКЕНОВ ---
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
-# -----------------
+HUGGINGFACE_API_KEY = os.environ.get("HUGGINGFACE_API_KEY")  # <-- добавили
+# -------------------------
 
 # Инициализация клиента Groq
 client = Groq(api_key=GROQ_API_KEY)
-
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 # --- Фиктивный HTTP-сервер для Render ---
 class HealthCheckHandler(BaseHTTPRequestHandler):
@@ -32,14 +36,14 @@ def run_http_server():
 
 threading.Thread(target=run_http_server, daemon=True).start()
 # -----------------------------------------
-ого
+
 # Системный промпт для Паймон
 SYSTEM_PROMPT = "Ты — Паймон из игры Genshin Impact. Говори как Паймон (в третьем лице, весело, иногда упоминай еду)."
 
 async def get_paimon_response(user_message: str) -> str:
     try:
         completion = client.chat.completions.create(
-            model="gemma2-9b-it",  # бесплатная быстрая модель, можно также "mixtral-8x7b-32768"
+            model="llama-3.1-8b-instant",  # актуальная модель
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": user_message}
@@ -64,6 +68,35 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply = await get_paimon_response(user_message)
     await update.message.reply_text(reply)
 
+# --- НОВАЯ КОМАНДА /draw ---
+async def draw(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Получаем текст запроса после команды /draw
+    prompt = ' '.join(context.args)
+    if not prompt:
+        await update.message.reply_text("Напиши, что нарисовать, например: /draw котик с крыльями")
+        return
+
+    await update.message.reply_text("🎨 Паймон рисует... Это может занять 10–20 секунд.")
+    
+    try:
+        # Используем Hugging Face Inference API
+        API_URL = "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-schnell"
+        headers = {"Authorization": f"Bearer {HUGGINGFACE_API_KEY}"}
+        payload = {"inputs": prompt}
+        
+        response = requests.post(API_URL, headers=headers, json=payload, timeout=60)
+        
+        if response.status_code == 200:
+            # Отправляем изображение как фото
+            await update.message.reply_photo(photo=response.content)
+        else:
+            logger.error(f"Ошибка генерации: {response.status_code} - {response.text}")
+            await update.message.reply_text("Ой-ой! Паймон не смогла нарисовать. Попробуй позже.")
+    except Exception as e:
+        logger.error(f"Исключение при генерации: {e}")
+        await update.message.reply_text("Что-то пошло не так... Попробуй ещё раз.")
+# -----------------------------
+
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.warning(f"Update {update} caused error {context.error}")
 
@@ -74,11 +107,16 @@ def main():
     if not GROQ_API_KEY:
         logger.error("Ключ Groq не найден!")
         return
+    if not HUGGINGFACE_API_KEY:
+        logger.error("Ключ Hugging Face не найден! Команда /draw не будет работать.")
+        # Можно продолжить без рисования
+
     app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("draw", draw))  # <-- регистрируем команду
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.add_error_handler(error_handler)
-    logger.info("🤖 Паймон с Groq запустилась!")
+    logger.info("🤖 Паймон с Groq и /draw запустилась!")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == '__main__':
