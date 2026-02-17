@@ -70,7 +70,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # --- НОВАЯ КОМАНДА /draw ---
 async def draw(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Получаем текст запроса после команды /draw
     prompt = ' '.join(context.args)
     if not prompt:
         await update.message.reply_text("Напиши, что нарисовать, например: /draw котик с крыльями")
@@ -78,23 +77,38 @@ async def draw(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text("🎨 Паймон рисует... Это может занять 10–20 секунд.")
     
-    try:
-        # Используем Hugging Face Inference API
-        API_URL = "https://router.huggingface.co/hf/prompthero/openjourney-v4"
-        headers = {"Authorization": f"Bearer {HUGGINGFACE_API_KEY}"}
-        payload = {"inputs": prompt}
-        
-        response = requests.post(API_URL, headers=headers, json=payload, timeout=60)
-        
-        if response.status_code == 200:
-            # Отправляем изображение как фото
-            await update.message.reply_photo(photo=response.content)
-        else:
-            logger.error(f"Ошибка генерации: {response.status_code} - {response.text}")
-            await update.message.reply_text("Ой-ой! Паймон не смогла нарисовать. Попробуй позже.")
-    except Exception as e:
-        logger.error(f"Исключение при генерации: {e}")
-        await update.message.reply_text("Что-то пошло не так... Попробуй ещё раз.")
+    # Список возможных URL для разных моделей
+    model_urls = [
+        "https://router.huggingface.co/hf/stabilityai/stable-diffusion-2-1",
+        "https://router.huggingface.co/stabilityai/stable-diffusion-2-1",
+        "https://router.huggingface.co/hf/runwayml/stable-diffusion-v1-5",
+        "https://router.huggingface.co/runwayml/stable-diffusion-v1-5",
+        "https://router.huggingface.co/hf/prompthero/openjourney-v4",
+        "https://router.huggingface.co/prompthero/openjourney-v4",
+    ]
+    
+    headers = {"Authorization": f"Bearer {HUGGINGFACE_API_KEY}"}
+    payload = {
+        "inputs": prompt,
+        "options": {"wait_for_model": True}
+    }
+    
+    for url in model_urls:
+        try:
+            logger.info(f"Пробуем URL: {url}")
+            response = requests.post(url, headers=headers, json=payload, timeout=60)
+            
+            if response.status_code == 200:
+                await update.message.reply_photo(photo=response.content)
+                return  # успех, выходим
+            else:
+                logger.error(f"URL {url} вернул ошибку {response.status_code}: {response.text}")
+        except Exception as e:
+            logger.error(f"URL {url} вызвал исключение: {e}")
+            continue
+    позже.")
+    # Если ни один URL не сработал
+    await update.message.reply_text("Ой-ой! Паймон не смогла нарисовать. Попробуй позже.")
 # -----------------------------
 
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
