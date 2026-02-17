@@ -39,7 +39,7 @@ SYSTEM_PROMPT = "Ты — Паймон из игры Genshin Impact. Говор�
 async def get_paimon_response(user_message: str) -> str:
     try:
         completion = client.chat.completions.create(
-            model="llama3-8b-8192",  # бесплатная быстрая модель, можно также "mixtral-8x7b-32768"
+            model="llama-3.1-8b-instant",  # бесплатная быстрая модель, можно также "mixtral-8x7b-32768"
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": user_message}
