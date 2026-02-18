@@ -157,11 +157,7 @@ async def draw(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await asyncio.sleep(3)
             else:
                 await update.message.reply_text("Что-то пошло не так... Попробуй ещё раз.")
-                return
-
-    
-                    
-                
+                return               
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.warning(f"Update {update} caused error {context.error}")
 
