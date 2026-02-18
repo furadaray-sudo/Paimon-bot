@@ -2,6 +2,8 @@ import logging
 import os
 import threading
 import requests  # <-- обязательно
+import re
+import asyncio
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
