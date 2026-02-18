@@ -4,6 +4,7 @@ import threading
 import requests  # <-- обязательно
 import re
 import asyncio
+import urllib.parse
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
@@ -93,6 +94,30 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_message = update.message.text
     logger.info(f"Сообщение: {user_message}")
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
+    async def draw(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    prompt = ' '.join(context.args)
+    if not prompt:
+        await update.message.reply_text("Напиши, что нарисовать, например: /draw котик с крыльями")
+        return
+
+    await update.message.reply_text("🎨 Паймон рисует... Это займёт несколько секунд.")
+    
+    try:
+        # Кодируем промпт для URL (заменяем пробелы и спецсимволы)
+        encoded_prompt = urllib.parse.quote(prompt)
+        url = f"https://image.pollinations.ai/prompt/{encoded_prompt}"
+        
+        # Получаем изображение
+        response = requests.get(url, timeout=30)
+        
+        if response.status_code == 200:
+            await update.message.reply_photo(photo=response.content)
+        else:
+            logger.error(f"Ошибка Pollinations: {response.status_code}")
+            await update.message.reply_text("Ой-ой! Паймон не смогла нарисовать. Попробуй позже.")
+    except Exception as e:
+        logger.error(f"Исключение при генерации: {e}")
+        await update.message.reply_text("Что-то пошло не так... Попробуй ещё раз.")
     
     # Получаем ответ от Groq
     reply = await get_paimon_response(user_message)
