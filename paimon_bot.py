@@ -94,14 +94,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_message = update.message.text
     logger.info(f"Сообщение: {user_message}")
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
-    async def draw(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    prompt = ' '.join(context.args)
-    if not prompt:
-        await update.message.reply_text("Напиши, что нарисовать, например: /draw котик с крыльями")
-        return
-
-    await update.message.reply_text("🎨 Паймон рисует... Это займёт несколько секунд.")
-    
     try:
         # Кодируем промпт для URL (заменяем пробелы и спецсимволы)
         encoded_prompt = urllib.parse.quote(prompt)
@@ -154,14 +146,31 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await asyncio.sleep(1)  # Пауза 1 секунда между сообщениями
 
 # --- НОВАЯ КОМАНДА /draw ---
-async def draw(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    async def draw(update: Update, context: ContextTypes.DEFAULT_TYPE):
     prompt = ' '.join(context.args)
     if not prompt:
         await update.message.reply_text("Напиши, что нарисовать, например: /draw котик с крыльями")
         return
 
-    await update.message.reply_text("🎨 Паймон рисует... Это может занять 10–20 секунд.")
+    await update.message.reply_text("🎨 Паймон рисует... Это займёт несколько секунд.")
     
+    try:
+        # Кодируем промпт для URL
+        import urllib.parse
+        encoded_prompt = urllib.parse.quote(prompt)
+        url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1024&height=1024&nologo=true"
+        
+        # Получаем изображение
+        response = requests.get(url, timeout=30)
+        
+        if response.status_code == 200:
+            await update.message.reply_photo(photo=response.content)
+        else:
+            logger.error(f"Ошибка Pollinations: {response.status_code}")
+            await update.message.reply_text("Ой-ой! Паймон не смогла нарисовать. Попробуй позже.")
+    except Exception as e:
+        logger.error(f"Исключение при генерации: {e}")
+        await update.message.reply_text("Что-то пошло не так... Попробуй ещё раз.")
     # Список возможных URL для разных моделей
     model_urls = [
         "https://router.huggingface.co/hf/stabilityai/stable-diffusion-2-1",
