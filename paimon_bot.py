@@ -1,7 +1,7 @@
 import logging
 import os
 import threading
-import requests  # <-- обязательно
+import requests
 import re
 import asyncio
 import urllib.parse
@@ -10,16 +10,14 @@ from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from groq import Groq
 
-# --- НАСТРОЙКИ ЛОГИРОВАНИЯ (должно быть в начале) ---
+# --- НАСТРОЙКИ ЛОГИРОВАНИЯ ---
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
-# ----------------------------------------------------
 
 # --- НАСТРОЙКИ ТОКЕНОВ ---
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
-HUGGINGFACE_API_KEY = os.environ.get("HUGGINGFACE_API_KEY")  # <-- добавили
-# -------------------------
+HUGGINGFACE_API_KEY = os.environ.get("HUGGINGFACE_API_KEY")  # пока не используется, но пусть будет
 
 # Инициализация клиента Groq
 client = Groq(api_key=GROQ_API_KEY)
@@ -40,7 +38,7 @@ def run_http_server():
 threading.Thread(target=run_http_server, daemon=True).start()
 # -----------------------------------------
 
-# Системный промпт для Паймон
+# Системный промпт для Паймон (смесь Шелдона и Пенни)
 SYSTEM_PROMPT = (
     "Ты — Паймон, но теперь ты сочетаешь черты двух персонажей "
     "из сериала «Теория большого взрыва»: Шелдона Купера и Пенни.\n\n"
@@ -94,36 +92,16 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_message = update.message.text
     logger.info(f"Сообщение: {user_message}")
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
-    try:
-        # Кодируем промпт для URL (заменяем пробелы и спецсимволы)
-        encoded_prompt = urllib.parse.quote(prompt)
-        url = f"https://image.pollinations.ai/prompt/{encoded_prompt}"
-        
-        # Получаем изображение
-        response = requests.get(url, timeout=30)
-        
-        if response.status_code == 200:
-            await update.message.reply_photo(photo=response.content)
-        else:
-            logger.error(f"Ошибка Pollinations: {response.status_code}")
-            await update.message.reply_text("Ой-ой! Паймон не смогла нарисовать. Попробуй позже.")
-    except Exception as e:
-        logger.error(f"Исключение при генерации: {e}")
-        await update.message.reply_text("Что-то пошло не так... Попробуй ещё раз.")
-    
+
     # Получаем ответ от Groq
     reply = await get_paimon_response(user_message)
-    
+
     # Разбиваем ответ на части (по предложениям)
-    # Сначала попробуем разделить по точкам, вопросительным и восклицательным знакам
-    import re
     sentences = re.split(r'(?<=[.!?])\s+', reply)
-    
-    # Если предложений мало или они длинные, разбиваем по длине (макс 300 символов)
     max_len = 300
     parts = []
     current = ""
-    
+
     for sentence in sentences:
         if len(current) + len(sentence) < max_len:
             current += sentence + " "
@@ -133,36 +111,31 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             current = sentence + " "
     if current:
         parts.append(current.strip())
-    
-    # Если разбивка не дала результата (одна часть), используем простую разбивку по длине
+
     if len(parts) <= 1 and len(reply) > max_len:
         parts = [reply[i:i+max_len] for i in range(0, len(reply), max_len)]
-    
+
     # Отправляем части с небольшой задержкой
     for i, part in enumerate(parts):
         await update.message.reply_text(part)
-        if i < len(parts) - 1:  # Не ждём после последнего
-            import asyncio
-            await asyncio.sleep(1)  # Пауза 1 секунда между сообщениями
+        if i < len(parts) - 1:
+            await asyncio.sleep(1)
 
-# --- НОВАЯ КОМАНДА /draw ---
-    async def draw(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# --- КОМАНДА /draw (генерация картинок через Pollinations) ---
+async def draw(update: Update, context: ContextTypes.DEFAULT_TYPE):
     prompt = ' '.join(context.args)
     if not prompt:
         await update.message.reply_text("Напиши, что нарисовать, например: /draw котик с крыльями")
         return
 
     await update.message.reply_text("🎨 Паймон рисует... Это займёт несколько секунд.")
-    
+
     try:
-        # Кодируем промпт для URL
-        import urllib.parse
         encoded_prompt = urllib.parse.quote(prompt)
+        # Формируем ссылку на Pollinations (можно убрать параметры размера и логотипа)
         url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1024&height=1024&nologo=true"
-        
-        # Получаем изображение
         response = requests.get(url, timeout=30)
-        
+
         if response.status_code == 200:
             await update.message.reply_photo(photo=response.content)
         else:
@@ -171,39 +144,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(f"Исключение при генерации: {e}")
         await update.message.reply_text("Что-то пошло не так... Попробуй ещё раз.")
-    # Список возможных URL для разных моделей
-    model_urls = [
-        "https://router.huggingface.co/hf/stabilityai/stable-diffusion-2-1",
-        "https://router.huggingface.co/stabilityai/stable-diffusion-2-1",
-        "https://router.huggingface.co/hf/runwayml/stable-diffusion-v1-5",
-        "https://router.huggingface.co/runwayml/stable-diffusion-v1-5",
-        "https://router.huggingface.co/hf/prompthero/openjourney-v4",
-        "https://router.huggingface.co/prompthero/openjourney-v4",
-    ]
-    
-    headers = {"Authorization": f"Bearer {HUGGINGFACE_API_KEY}"}
-    payload = {
-        "inputs": prompt,
-        "options": {"wait_for_model": True}
-    }
-    
-    for url in model_urls:
-        try:
-            logger.info(f"Пробуем URL: {url}")
-            response = requests.post(url, headers=headers, json=payload, timeout=60)
-            
-            if response.status_code == 200:
-                await update.message.reply_photo(photo=response.content)
-                return  # успех, выходим
-            else:
-                logger.error(f"URL {url} вернул ошибку {response.status_code}: {response.text}")
-        except Exception as e:
-            logger.error(f"URL {url} вызвал исключение: {e}")
-            continue
-    
-    # Если ни один URL не сработал
-    await update.message.reply_text("Ой-ой! Паймон не смогла нарисовать. Попробуй позже.")
-# -----------------------------
 
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.warning(f"Update {update} caused error {context.error}")
@@ -216,12 +156,11 @@ def main():
         logger.error("Ключ Groq не найден!")
         return
     if not HUGGINGFACE_API_KEY:
-        logger.error("Ключ Hugging Face не найден! Команда /draw не будет работать.")
-        # Можно продолжить без рисования
+        logger.warning("Ключ Hugging Face не найден, но команда /draw будет работать через Pollinations.")
 
     app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("draw", draw))  # <-- регистрируем команду
+    app.add_handler(CommandHandler("draw", draw))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.add_error_handler(error_handler)
     logger.info("🤖 Паймон с Groq и /draw запустилась!")
