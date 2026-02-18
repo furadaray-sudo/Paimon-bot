@@ -128,23 +128,40 @@ async def draw(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Напиши, что нарисовать, например: /draw котик с крыльями")
         return
 
-    await update.message.reply_text("🎨 Паймон рисует... Это займёт несколько секунд.")
+    await update.message.reply_text("🎨 Паймон рисует... Это может занять несколько секунд.")
 
-    try:
-        encoded_prompt = urllib.parse.quote(prompt)
-        # Формируем ссылку на Pollinations (можно убрать параметры размера и логотипа)
-        url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1024&height=1024&nologo=true"
-        response = requests.get(url, timeout=30)
+    encoded_prompt = urllib.parse.quote(prompt)
+    url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1024&height=1024&nologo=true"
 
-        if response.status_code == 200:
-            await update.message.reply_photo(photo=response.content)
-        else:
-            logger.error(f"Ошибка Pollinations: {response.status_code}")
-            await update.message.reply_text("Ой-ой! Паймон не смогла нарисовать. Попробуй позже.")
-    except Exception as e:
-        logger.error(f"Исключение при генерации: {e}")
-        await update.message.reply_text("Что-то пошло не так... Попробуй ещё раз.")
+    # Делаем до 3 попыток с интервалом 3 секунды
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            response = requests.get(url, timeout=30)
+            if response.status_code == 200:
+                await update.message.reply_photo(photo=response.content)
+                return  # успех – выходим
+            elif response.status_code == 530:
+                logger.warning(f"Pollinations временно недоступен (попытка {attempt+1}/{max_retries})")
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(3)  # ждём 3 секунды перед следующей попыткой
+                else:
+                    await update.message.reply_text("Ой-ой! Паймон не смогла нарисовать. Попробуй позже.")
+            else:
+                logger.error(f"Ошибка Pollinations: {response.status_code}")
+                await update.message.reply_text("Ой-ой! Паймон не смогла нарисовать. Попробуй позже.")
+                return
+        except Exception as e:
+            logger.error(f"Исключение при генерации (попытка {attempt+1}): {e}")
+            if attempt < max_retries - 1:
+                await asyncio.sleep(3)
+            else:
+                await update.message.reply_text("Что-то пошло не так... Попробуй ещё раз.")
+                return
 
+    
+                    
+                
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.warning(f"Update {update} caused error {context.error}")
 
