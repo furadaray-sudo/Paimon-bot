@@ -78,8 +78,40 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_message = update.message.text
     logger.info(f"Сообщение: {user_message}")
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
+    
+    # Получаем ответ от Groq
     reply = await get_paimon_response(user_message)
-    await update.message.reply_text(reply)
+    
+    # Разбиваем ответ на части (по предложениям)
+    # Сначала попробуем разделить по точкам, вопросительным и восклицательным знакам
+    import re
+    sentences = re.split(r'(?<=[.!?])\s+', reply)
+    
+    # Если предложений мало или они длинные, разбиваем по длине (макс 300 символов)
+    max_len = 300
+    parts = []
+    current = ""
+    
+    for sentence in sentences:
+        if len(current) + len(sentence) < max_len:
+            current += sentence + " "
+        else:
+            if current:
+                parts.append(current.strip())
+            current = sentence + " "
+    if current:
+        parts.append(current.strip())
+    
+    # Если разбивка не дала результата (одна часть), используем простую разбивку по длине
+    if len(parts) <= 1 and len(reply) > max_len:
+        parts = [reply[i:i+max_len] for i in range(0, len(reply), max_len)]
+    
+    # Отправляем части с небольшой задержкой
+    for i, part in enumerate(parts):
+        await update.message.reply_text(part)
+        if i < len(parts) - 1:  # Не ждём после последнего
+            import asyncio
+            await asyncio.sleep(1)  # Пауза 1 секунда между сообщениями
 
 # --- НОВАЯ КОМАНДА /draw ---
 async def draw(update: Update, context: ContextTypes.DEFAULT_TYPE):
