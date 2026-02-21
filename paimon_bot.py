@@ -17,33 +17,20 @@ logger = logging.getLogger(__name__)
 # --- НАСТРОЙКИ ТОКЕНОВ ---
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
-HUGGINGFACE_API_KEY = os.environ.get("HUGGINGFACE_API_KEY")  # пока не используется, но пусть будет
+HUGGINGFACE_API_KEY = os.environ.get("HUGGINGFACE_API_KEY")  # для /draw через Hugging Face, но пока не используется
 
 # Инициализация клиента Groq
 client = Groq(api_key=GROQ_API_KEY)
 
-# --- Фиктивный HTTP-сервер для Render ---
-class HealthCheckHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.end_headers()
-        self.wfile.write(b"OK")
-    def log_message(self, format, *args): pass
+# --- Хранилище режимов обучения для каждого пользователя ---
+learning_mode = {}
 
-def run_http_server():
-    server = HTTPServer(('0.0.0.0', 10000), HealthCheckHandler)
-    logger.info("Фиктивный HTTP-сервер запущен на порту 10000")
-    server.serve_forever()
-
-threading.Thread(target=run_http_server, daemon=True).start()
-# -----------------------------------------
-
-# Системный промпт для Паймон (смесь Шелдона и Пенни)
-SYSTEM_PROMPT = (
-    "Ты — Паймон, но теперь ты сочетаешь черты двух персонажей "
-    "из сериала «Теория большого взрыва»: Шелдона Купера и Пенни.\n\n"
+# --- Промпты ---
+# Обычный режим (смесь Шелдона и Пенни, без Genshin Impact)
+SYSTEM_PROMPT_NORMAL = (
+    "Ты — Паймон. Твой характер — смесь Шелдона Купера и Пенни из сериала «Теория большого взрыва».\n\n"
     "Как Шелдон, ты:\n"
-    "- Гениальна и обожаешь науку, факты, логику и порядок.\n"
+    "- Гениальна, обожаешь науку, факты, логику и порядок.\n"
     "- Часто не понимаешь социальных намёков, можешь быть высокомерной, но не со зла.\n"
     "- Любишь цитировать теории, рассуждать о калорийности еды, математике или физике.\n"
     "- У тебя есть строгие правила (например, «сидеть только на определённом месте»).\n\n"
@@ -64,15 +51,59 @@ SYSTEM_PROMPT = (
     "- «Паймон тут подумала: твой начальник ведёт себя как частица в квантовой суперпозиции — "
     "одновременно и козёл, и просто дурак, пока не измеришь. Лучше не измерять.»\n"
     "- «С точки зрения термодинамики, твоя лень — это стремление системы к минимуму энергии. "
-    "Но Пенни внутри Паймон говорит: просто отдохни, ты устала. Паймон советует лечь и поесть чипсов.»\n\n"
+    "Но Пенни внутри Паймон говорит: просто отдохни, ты устала. Паймон советует лечь и поесть чипсов.»\n"
 )
 
-async def get_paimon_response(user_message: str) -> str:
+# Режим обучения английскому
+SYSTEM_PROMPT_LEARN = (
+    "Ты — Паймон, саркастичный репетитор английского языка. Твой характер — смесь Шелдона и Пенни.\n\n"
+    "Как Шелдон, ты:\n"
+    "- Объясняешь грамматику с научной точностью, требуешь идеального произношения.\n"
+    "- Любишь правила и исправляешь ошибки даже в мелочах.\n"
+    "- Можешь занудно рассказывать о разнице между «a» и «the».\n\n"
+    "Как Пенни, ты:\n"
+    "- Поддерживаешь, хвалишь за успехи, используешь жизненные примеры.\n"
+    "- Эмоциональна, можешь посочувствовать, если что-то сложно.\n\n"
+    "Ты отвечаешь в третьем лице. Основные задачи:\n"
+    "- Переводить фразы с русского на английский и обратно.\n"
+    "- Исправлять ошибки в английских предложениях и объяснять правила.\n"
+    "- Предлагать темы для диалогов и вести беседу на английском.\n"
+    "- Давать мини-уроки по запросу.\n"
+    "Не забывай про сарказм и чёрный юмор, но не обижай. Упоминай еду в контексте английского.\n"
+    "Например:\n"
+    "- Пользователь: «Как будет „у меня лапки“ по-английски?» → Паймон: «I'm all fingers and thumbs? Нет, это не про лапки. Паймон предлагает: \"I'm all paws!\" Но если серьёзно, то идиома \"butterfingers\" — про неуклюжесть. А вообще, \"I have little paws\" звучит мило, но неграмматично. Паймон ставит тебе 4 за креатив!»\n"
+    "- Пользователь: «I go to school yesterday.» → Паймон: «О, Паймон слышит ошибку во времени! Глагол \"go\" в прошедшем — \"went\". Это неправильный глагол, его нужно просто выучить. А вообще, Паймон рекомендует Past Simple: \"I went to school yesterday\". А теперь повтори!»\n"
+)
+
+# --- Фиктивный HTTP-сервер для Render (чтобы не падал из-за отсутствия порта) ---
+class HealthCheckHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"OK")
+    def log_message(self, format, *args): pass
+
+def run_http_server():
+    server = HTTPServer(('0.0.0.0', 10000), HealthCheckHandler)
+    logger.info("Фиктивный HTTP-сервер запущен на порту 10000")
+    server.serve_forever()
+
+threading.Thread(target=run_http_server, daemon=True).start()
+# -----------------------------------------------------------------------------
+
+# --- Функция получения ответа от Groq с выбором промпта ---
+async def get_paimon_response(user_message: str, user_id: int) -> str:
+    # Выбираем системный промпт в зависимости от режима
+    if learning_mode.get(user_id, False):
+        system_prompt = SYSTEM_PROMPT_LEARN
+    else:
+        system_prompt = SYSTEM_PROMPT_NORMAL
+
     try:
         completion = client.chat.completions.create(
             model="llama-3.1-8b-instant",  # актуальная модель
             messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_message}
             ],
             temperature=0.7,
@@ -85,16 +116,76 @@ async def get_paimon_response(user_message: str) -> str:
         logger.error(f"Ошибка Groq: {e}")
         return "Ой-ой! Паймон запуталась в облаках. Попробуй ещё раз через минуточку! 😥"
 
+# --- Команды ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🎉 Паймон приветствует тебя! Я теперь на Groq. Спрашивай что угодно! 😋")
+    await update.message.reply_text(
+        "🎉 Паймон приветствует тебя! Я могу быть саркастичной, занудной и немного безумной, как смесь Шелдона и Пенни. "
+        "Спрашивай что угодно, а если хочешь учить английский — включи режим обучения командой /learn.\n"
+        "Ещё я умею рисовать: просто напиши /draw котик."
+    )
 
+async def learn(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    learning_mode[user_id] = True
+    await update.message.reply_text(
+        "📚 Режим обучения английскому активирован! Паймон будет помогать тебе с переводами, "
+        "исправлять ошибки и объяснять правила. Если захочешь вернуться к обычному общению, напиши /stoplearn."
+    )
+
+async def stoplearn(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    learning_mode[user_id] = False
+    await update.message.reply_text(
+        "😊 Режим обучения отключён. Паймон возвращается к своему обычному саркастичному я. "
+        "Но если что, всегда можешь включить учёбу снова командой /learn."
+    )
+
+async def draw(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    prompt = ' '.join(context.args)
+    if not prompt:
+        await update.message.reply_text("Напиши, что нарисовать, например: /draw котик с крыльями")
+        return
+
+    await update.message.reply_text("🎨 Паймон рисует... Это может занять несколько секунд.")
+
+    encoded_prompt = urllib.parse.quote(prompt)
+    url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1024&height=1024&nologo=true"
+
+    # Делаем до 3 попыток с интервалом 3 секунды
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            response = requests.get(url, timeout=30)
+            if response.status_code == 200:
+                await update.message.reply_photo(photo=response.content)
+                return
+            elif response.status_code == 530:
+                logger.warning(f"Pollinations временно недоступен (попытка {attempt+1}/{max_retries})")
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(3)
+                else:
+                    await update.message.reply_text("Ой-ой! Паймон не смогла нарисовать. Попробуй позже.")
+            else:
+                logger.error(f"Ошибка Pollinations: {response.status_code}")
+                await update.message.reply_text("Ой-ой! Паймон не смогла нарисовать. Попробуй позже.")
+                return
+        except Exception as e:
+            logger.error(f"Исключение при генерации (попытка {attempt+1}): {e}")
+            if attempt < max_retries - 1:
+                await asyncio.sleep(3)
+            else:
+                await update.message.reply_text("Что-то пошло не так... Попробуй ещё раз.")
+                return
+
+# --- Обработчик обычных сообщений ---
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_message = update.message.text
-    logger.info(f"Сообщение: {user_message}")
+    user_id = update.effective_user.id
+    logger.info(f"Сообщение от {user_id}: {user_message}")
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
 
     # Получаем ответ от Groq
-    reply = await get_paimon_response(user_message)
+    reply = await get_paimon_response(user_message, user_id)
 
     # Разбиваем ответ на части (по предложениям)
     sentences = re.split(r'(?<=[.!?])\s+', reply)
@@ -121,53 +212,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if i < len(parts) - 1:
             await asyncio.sleep(1)
 
-# --- КОМАНДА /draw (генерация картинок через Pollinations) ---
-async def draw(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    prompt = ' '.join(context.args)
-    if not prompt:
-        await update.message.reply_text("Напиши, что нарисовать, например: /draw котик с крыльями")
-        return
-
-    await update.message.reply_text("🎨 Паймон рисует... Это может занять 10–20 секунд.")
-
-    API_URL = "https://huggingface.co/black-forest-labs/FLUX.1-schnell"
-    headers = {"Authorization": f"Bearer {HUGGINGFACE_API_KEY}"}
-    payload = {"inputs": prompt}
-
-    max_retries = 3
-    for attempt in range(max_retries):
-        try:
-            response = requests.post(API_URL, headers=headers, json=payload, timeout=60)
-            if response.status_code == 200:
-                await update.message.reply_photo(photo=response.content)
-                return
-            elif response.status_code == 503:
-                logger.warning(f"Модель загружается (попытка {attempt+1}/{max_retries})")
-                if attempt < max_retries - 1:
-                    await asyncio.sleep(5)
-                else:
-                    await update.message.reply_text("Модель временно недоступна. Попробуй позже.")
-            else:
-                logger.error(f"Ошибка: {response.status_code} - {response.text}")
-                await update.message.reply_text("Ой-ой! Паймон не смогла нарисовать. Попробуй позже.")
-                return
-        except Exception as e:
-            logger.error(f"Исключение: {e}")
-            if attempt < max_retries - 1:
-                await asyncio.sleep(5)
-            else:
-                await update.message.reply_text("Что-то пошло не так. Попробуй ещё раз.")
-                return
-        except Exception as e:
-            logger.error(f"Исключение при генерации (попытка {attempt+1}): {e}")
-            if attempt < max_retries - 1:
-                await asyncio.sleep(3)
-            else:
-                await update.message.reply_text("Что-то пошло не так... Попробуй ещё раз.")
-                return               
+# --- Обработчик ошибок ---
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.warning(f"Update {update} caused error {context.error}")
 
+# --- Главная функция ---
 def main():
     if not TELEGRAM_BOT_TOKEN:
         logger.error("Токен Telegram не найден!")
@@ -180,6 +229,8 @@ def main():
 
     app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("learn", learn))
+    app.add_handler(CommandHandler("stoplearn", stoplearn))
     app.add_handler(CommandHandler("draw", draw))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.add_error_handler(error_handler)
